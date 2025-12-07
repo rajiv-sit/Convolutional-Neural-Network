@@ -5,6 +5,7 @@ from conan.tools.cmake import CMakeDeps, CMakeToolchain, CMake, cmake_layout
 from conan.tools.build import check_min_cppstd, check_max_cppstd
 from conan.errors import ConanInvalidConfiguration
 from conan.tools.files import copy
+from conan.tools.gnu import AutotoolsToolchain, Autotools, PkgConfigDeps
 
 class ConvolutionalNeuralNetwork(ConanFile):
     name = "cnn"
@@ -32,52 +33,32 @@ class ConvolutionalNeuralNetwork(ConanFile):
         if self.options.shared:
             self.options.rm_safe("fPIC")
     
-    # operating system validation
     def validate(self):
-        print(self.settings.os)
-        if self.settings.os != "Windows" & self.settings.os != "Linux" & self.settings.os != "iOS" & self.settings.os != "watchOS" & self.settings.os != "tvOS" & self.settings.os != "visionOS" & self.settings.os != "Macos" & self.settings.os != "Android" & self.settings.os != "FreeBSD" & self.settings.os != "SunOS" & self.settings.os != "AIX" & self.settings.os != "Arduino" & self.settings.os != "Emscripten" & self.settings.os != "Neutrino" & self.settings.os != "baremetal" & self.settings.os != "VxWorks":
-                raise ConanInvalidConfiguration("No support for the operating system")
-    
-    # compiler validations     
-    def validate(self):
-        print(self.settings.compiler)
-        if self.settings.compiler == "sun-cc":
-            self.settings.compiler.libcxx = "libstdc++"
-        elif self.settings.compiler == "gcc":
-            check_min_cppstd(self, "gnu11")   
-            check_max_cppstd(self, "gnu23")            
-            self.settings.compiler.libcxx = "libstdc++11"
-            self.settings.compiler.cppstd = "gnu23"
-        elif self.settings.compiler == "msvc":
-            check_min_cppstd(self, "14")    
-            check_max_cppstd(self, "23")                
-            self.settings.compiler.cppstd = "14"
-        elif self.settings.compiler == "clang":
-            check_min_cppstd(self, "gnu11")    
-            check_max_cppstd(self, "gnu23")  
-            self.settings.compiler.libcxx = "libstdc++11"
-            self.settings.compiler.cppstd = "gnu23"
-        elif self.settings.compiler == "apple-clang":
-            check_min_cppstd(self, "gnu11")    
-            check_max_cppstd(self, "gnu23")  
-            self.settings.compiler.libcxx = "libstdc++"
-            self.settings.compiler.cppstd = "gnu23"
-        elif self.settings.compiler == "intel-cc":
-            check_min_cppstd(self, "gnu11")    
-            check_max_cppstd(self, "gnu23")     
-            self.settings.compiler.mode = "dpcpp"
-            self.settings.compiler.libcxx = "ibstdc++11"
-            self.settings.compiler.cppstd = "gnu23"
-        elif self.settings.compiler == "qcc":   
-            check_min_cppstd(self, "gnu11")    
-            check_max_cppstd(self, "gnu17")    
-            self.settings.compiler.libcxx = "cxx"
-            self.settings.compiler.cppstd = "gnu17"
-        elif self.settings.compiler == "mcst-lcc":
-            check_min_cppstd(self, "gnu11")    
-            check_max_cppstd(self, "gnu23") 
-            self.settings.compiler.libcxx = "libstdc++11"
-            self.settings.compiler.cppstd = "gnu23"
+        # OS support check
+        supported_os = {
+            "Windows",
+            "Linux",
+            "iOS",
+            "watchOS",
+            "tvOS",
+            "visionOS",
+            "Macos",
+            "Android",
+            "FreeBSD",
+            "SunOS",
+            "AIX",
+            "Arduino",
+            "Emscripten",
+            "Neutrino",
+            "baremetal",
+            "VxWorks",
+        }
+        if str(self.settings.os) not in supported_os:
+            raise ConanInvalidConfiguration(f"No support for the operating system: {self.settings.os}")
+
+        # C++ standard checks (align with CMake's C++20)
+        check_min_cppstd(self, "20")
+        check_max_cppstd(self, "23")
     
     # Needed libraries
     def requirements(self):

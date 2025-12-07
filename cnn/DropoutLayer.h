@@ -1,6 +1,7 @@
 #pragma once
 
 #include <random>
+#include <stdexcept>
 #include <vector>
 #include "Layer.h"
 
@@ -17,6 +18,7 @@ class DropoutLayer : public Layer
     DropoutLayer(float rate)
         : dropoutRate_(rate)
         , isTraining_(true)
+        , generator_(std::random_device{}())
     {
     }
 
@@ -35,7 +37,6 @@ class DropoutLayer : public Layer
         if (isTraining_)
         {
             std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
-            std::mt19937                          generator; // Mersenne Twister RNG
 
             // Apply dropout and create mask
             for (size_t i = 0; i < output_.size(); ++i) // Iterate over batches
@@ -46,7 +47,7 @@ class DropoutLayer : public Layer
                     mask_[i][j].resize(output_[i][j].size());
                     for (size_t k = 0; k < output_[i][j].size(); ++k) // Iterate over height
                     {
-                        if (distribution(generator) < dropoutRate_)
+                        if (distribution(generator_) < dropoutRate_)
                         {
                             output_[i][j][k] = 0.0f; // Set unit to zero
                             mask_[i][j][k]   = 0.0f; // Mark unit as dropped in mask
@@ -76,10 +77,35 @@ class DropoutLayer : public Layer
 
         if (isTraining_) // During training, apply the mask to propagate gradients
         {
+            if (mask_.empty())
+            {
+                throw std::runtime_error("Dropout backward: mask is empty; forward pass not executed or mask reset.");
+            }
+            if (mask_.size() != gradInput.size())
+            {
+                throw std::runtime_error("Dropout backward: mask/output gradient size mismatch at batch dimension. mask="
+                                         + std::to_string(mask_.size()) + " grad=" +
+                                         std::to_string(gradInput.size()));
+            }
             for (size_t i = 0; i < gradInput.size(); ++i) // Iterate over batches
             {
+                if (mask_[i].size() != gradInput[i].size())
+                {
+                    throw std::runtime_error(
+                        "Dropout backward: mask/output gradient size mismatch at channel dimension (batch " +
+                        std::to_string(i) + "). mask=" + std::to_string(mask_[i].size()) +
+                        " grad=" + std::to_string(gradInput[i].size()));
+                }
                 for (size_t j = 0; j < gradInput[i].size(); ++j) // Iterate over channels
                 {
+                    if (mask_[i][j].size() != gradInput[i][j].size())
+                    {
+                        throw std::runtime_error(
+                            "Dropout backward: mask/output gradient size mismatch at spatial dimension (batch " +
+                            std::to_string(i) + ", channel " + std::to_string(j) + "). mask=" +
+                            std::to_string(mask_[i][j].size()) + " grad=" +
+                            std::to_string(gradInput[i][j].size()));
+                    }
                     for (size_t k = 0; k < gradInput[i][j].size(); ++k) // Iterate over height
                     {
                         gradInput[i][j][k] *= mask_[i][j][k]; // Multiply gradient by mask
@@ -125,4 +151,5 @@ class DropoutLayer : public Layer
     bool                                         isTraining_;  // Flag to indicate if the layer is in training mode
     std::vector<std::vector<std::vector<float>>> output_;      // Output from the forward pass
     std::vector<std::vector<std::vector<float>>> mask_;        // Mask to store which units were dropped
+    std::mt19937                                 generator_;   // RNG engine seeded once
 };

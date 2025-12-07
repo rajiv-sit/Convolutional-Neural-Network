@@ -1,6 +1,7 @@
 #pragma once
 
 #include <iostream>
+#include <memory>
 #include <vector>
 
 #include "Loss.h"
@@ -68,9 +69,9 @@ class Model
     /// This method allows the model to use a specific loss function for training and validation.
     ///
     /// @param [in] lossCalculator Pointer to a loss calculator object.
-    virtual void SetLossCalculator(std::shared_ptr<Loss>& lossCalculator)
+    virtual void SetLossCalculator(std::unique_ptr<Loss> lossCalculator)
     {
-        lossCalculator_ = lossCalculator; // Set the loss calculator
+        lossCalculator_ = std::move(lossCalculator); // Set the loss calculator
     }
 
     /// Virtual destructor for proper cleanup
@@ -80,6 +81,6 @@ class Model
     int             epochs_;         // Number of epochs for training
     float           stopCriteria_;   // Stopping criteria for training
     float           learningRate_;   // Learning rate for training
-    int             batchSize_;      // Batch size for training (added for CNN)
-    std::shared_ptr<Loss> lossCalculator_; // Use shared pointer for loss function
+    int                       batchSize_;      // Batch size for training (added for CNN)
+    std::unique_ptr<Loss>     lossCalculator_; // Loss function used by the model
 };

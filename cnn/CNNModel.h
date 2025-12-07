@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 #include <format>
 #include <iostream>
 #include <iterator>
@@ -10,19 +11,19 @@
 #include <vector>
 
 #include "ConvolutionalLayer.h"
-#include "CrossEntropyLoss.h" 
-#include "DropoutLayer.h" 
-#include "FlattenLayer.h" 
-#include "FocalLoss.h" 
-#include "FullyConnectedLayer.h" 
-#include "L2Loss.h"  
-#include "Layer.h" 
-#include "Loss.h" 
-#include "MeanSquaredError.h" 
-#include "Model.h" 
-#include "OutputLayer.h" 
-#include "PoolingLayer.h"  
-#include "ReLUActivationLayer.h" 
+#include "CrossEntropyLoss.h"
+#include "DropoutLayer.h"
+#include "FlattenLayer.h"
+#include "FocalLoss.h"
+#include "FullyConnectedLayer.h"
+#include "L2Loss.h"
+#include "Layer.h"
+#include "Loss.h"
+#include "MeanSquaredError.h"
+#include "Model.h"
+#include "OutputLayer.h"
+#include "PoolingLayer.h"
+#include "ReLUActivationLayer.h"
 
 /// @class CNNModel
 /// @brief A specific derived class representing a Convolutional Neural Network (CNN) model.
@@ -71,6 +72,39 @@ class CNNModel : public Model
     /// Constructs the layers of the CNN, specifying the parameters for each layer.
     void Build() override
     {
+        if (layers_.empty())
+        {
+            throw std::invalid_argument("CNNModel must be constructed with at least one layer.");
+        }
+
+        if (!lossCalculator_)
+        {
+            throw std::runtime_error("Loss calculator must be set before building the model.");
+        }
+    }
+
+    /// @brief Performs a forward pass through all layers with control over training mode.
+    /// @param input Input tensor (channels, height, width).
+    /// @param isTraining Whether the network should behave in training mode (e.g., enable dropout).
+    /// @return Flattened output logits/probabilities from the final layer.
+    std::vector<float> ForwardThroughLayers(const std::vector<std::vector<std::vector<float>>>& input,
+                                            bool                                                isTraining)
+    {
+        SetDropoutTrainingMode(isTraining);
+
+        std::vector<std::vector<std::vector<float>>> output = input;
+        for (const auto& layer : layers_)
+        {
+            output = layer->Forward(output);
+        }
+
+        if (!output.empty() && !output[0].empty())
+        {
+            return output[0][0];
+        }
+
+        std::cerr << "Error: Output does not contain valid logits." << std::endl;
+        return {};
     }
 
     /// @brief Trains the CNN model with input data and corresponding labels.
@@ -83,9 +117,9 @@ class CNNModel : public Model
         const float  initialLearningRate      = learningRate_; // Initial learning rate for weight updates
         const int    numEpochs                = epochs_;       // Maximum number of epochs for training
         const size_t numSamples               = data.size();
-        const int    patience                 = stopCriteria_; // Early stopping patience
-        float        bestLoss                 = std::numeric_limits<float>::max();
-        int          epochsWithoutImprovement = 0;
+
+        // Ensure dropout behaves correctly during training
+        SetDropoutTrainingMode(true);
 
         for (int epoch = 0; epoch < numEpochs; ++epoch)
         {
@@ -98,8 +132,21 @@ class CNNModel : public Model
             {
                 std::cout << "Processing sample " << i + 1 << "/" << numSamples << std::endl;
 
-                // Forward pass: obtain predictions
-                auto predictions = Predict(data[i]);
+                // Forward pass: obtain predictions (training mode keeps dropout active)
+                auto predictions = ForwardThroughLayers(data[i], true);
+
+                if (predictions.empty())
+                {
+                    throw std::runtime_error("Empty predictions encountered during training (sample " +
+                                             std::to_string(i) + ").");
+                }
+                if (predictions.size() != labels[i].size())
+                {
+                    throw std::runtime_error("Prediction/label size mismatch during training (sample " +
+                                             std::to_string(i) + "): predictions=" +
+                                             std::to_string(predictions.size()) + ", labels=" +
+                                             std::to_string(labels[i].size()) + ".");
+                }
 
                 // Compute loss using the selected loss function
                 float loss = lossCalculator_->ComputeLoss(labels[i], predictions); // Update based on chosen loss
@@ -109,31 +156,28 @@ class CNNModel : public Model
 
                 // Backpropagation: update weights
                 Backpropagation(predictions, labels[i], initialLearningRate);
+                for (const auto& layer : layers_)
+                {
+                    layer->UpdateWeights(initialLearningRate);
+                }
             }
 
             // Average loss for the epoch
             epochLoss /= numSamples;
             std::cout << "Average Loss for Epoch " << epoch + 1 << ": " << epochLoss << std::endl;
 
-            // Check for early stopping
-            if (epochLoss < bestLoss)
+            // Early stopping based on absolute loss threshold
+            if (stopCriteria_ > 0.0f && epochLoss <= stopCriteria_)
             {
-                bestLoss                 = epochLoss;
-                epochsWithoutImprovement = 0;
-                // Optionally reduce learning rate here if necessary
-            }
-            else
-            {
-                epochsWithoutImprovement++;
-                if (epochsWithoutImprovement >= patience)
-                {
-                    std::cout << "Early stopping triggered." << std::endl;
-                    break; // Stop training if no improvement
-                }
+                std::cout << "Early stopping triggered (loss threshold reached)." << std::endl;
+                break;
             }
             std::cout << "\n" << std::endl;
         }
         std::cout << "Training completed." << std::endl;
+
+        // Switch dropout to inference mode after training
+        SetDropoutTrainingMode(false);
     }
 
     /// @brief Validates the CNN model using the provided validation data and labels.
@@ -145,6 +189,9 @@ class CNNModel : public Model
     std::pair<float, float> Validate(const std::vector<std::vector<std::vector<std::vector<float>>>>& valData,
                                      const std::vector<std::vector<float>>&                           valLabels)
     {
+        // Dropout should be off during validation
+        SetDropoutTrainingMode(false);
+
         float epochValLoss       = 0.0f; // To accumulate total validation loss
         int   correctPredictions = 0;    // To count correct predictions
 
@@ -152,7 +199,20 @@ class CNNModel : public Model
         for (size_t i = 0; i < valData.size(); ++i)
         {
             // Get predictions for the current validation sample
-            auto valPredictions = Predict(valData[i]);
+            auto valPredictions = ForwardThroughLayers(valData[i], false);
+
+            if (valPredictions.empty())
+            {
+                throw std::runtime_error("Empty predictions encountered during validation (sample " +
+                                         std::to_string(i) + ").");
+            }
+            if (valPredictions.size() != valLabels[i].size())
+            {
+                throw std::runtime_error("Prediction/label size mismatch during validation (sample " +
+                                         std::to_string(i) + "): predictions=" +
+                                         std::to_string(valPredictions.size()) + ", labels=" +
+                                         std::to_string(valLabels[i].size()) + ".");
+            }
 
             // Get the true classifications
             auto valTruth = valLabels[i];
@@ -207,25 +267,7 @@ class CNNModel : public Model
     std::vector<float> Predict(const std::vector<std::vector<std::vector<float>>>& input) override
     {
         std::cout << "Making predictions with CNN model." << std::endl;
-
-        // Forward pass through all layers
-        std::vector<std::vector<std::vector<float>>> output = input; // Start with the input
-
-        for (const auto& layer : layers_)
-        {
-            output = layer->Forward(output); // Call the forward method of each layer
-        }
-
-        // Assuming the output tensor has the structure:
-        if (!output.empty() && !output[0].empty())
-        {
-            return output[0][0]; // Return the output of the first sample
-        }
-        else
-        {
-            std::cerr << "Error: Output does not contain valid logits." << std::endl;
-            return {}; // Return an empty vector on error
-        }
+        return ForwardThroughLayers(input, false);
     }
 
     std::vector<float> GetAllWeights() const
@@ -241,7 +283,6 @@ class CNNModel : public Model
 
   private:
     std::vector<std::unique_ptr<Layer>> layers_;         // Vector to hold the layers of the CNN
-    std::unique_ptr<Loss>               lossCalculator_; // Pointer to Loss calculator
 
     /// @brief Performs backpropagation to update weights based on the loss gradient.
     /// This function computes the loss gradient and propagates it backward through the network.
@@ -273,5 +314,17 @@ class CNNModel : public Model
     {
         // Use the loss calculator to compute gradients
         return lossCalculator_->ComputeGradient(predictions, trueLabels); // Use the specific loss to compute gradients
+    }
+
+    /// @brief Enable/disable training mode for dropout layers.
+    void SetDropoutTrainingMode(bool isTraining)
+    {
+        for (const auto& layer : layers_)
+        {
+            if (auto* dropout = dynamic_cast<DropoutLayer*>(layer.get()))
+            {
+                dropout->SetTrainingMode(isTraining);
+            }
+        }
     }
 };

@@ -39,6 +39,11 @@ class FullyConnectedLayer : public Layer // Inherit from Layer
     {
         // Flatten input for the fully connected operation
         std::vector<float> flattenedInput = FlattenInput(input); // Flatten the input tensor
+        if (flattenedInput.size() != static_cast<size_t>(inputSize_))
+        {
+            throw std::runtime_error("FullyConnectedLayer Forward: flattened input size mismatch. Expected " +
+                                     std::to_string(inputSize_) + " got " + std::to_string(flattenedInput.size()));
+        }
         std::vector<float> output(outputSize_, 0.0f);            // Initialize output vector
 
         // Compute output by performing matrix multiplication and adding biases
@@ -70,6 +75,12 @@ class FullyConnectedLayer : public Layer // Inherit from Layer
     {
         // Flatten upstream gradient for the fully connected layer
         std::vector<float> flattenedGradient = FlattenInput(upstreamGradient);      // Flatten the upstream gradient
+        if (flattenedGradient.size() != static_cast<size_t>(outputSize_))
+        {
+            throw std::runtime_error("FullyConnectedLayer Backward: upstream gradient size mismatch. Expected " +
+                                     std::to_string(outputSize_) + " got " +
+                                     std::to_string(flattenedGradient.size()));
+        }
         std::vector<float> inputGradient(inputSize_, 0.0f);                         // Initialize input gradient vector
         weightsGradient_.resize(outputSize_, std::vector<float>(inputSize_, 0.0f)); // Resize weights gradient
         biasesGradient_.resize(outputSize_, 0.0f);                                  // Resize biases gradient
@@ -82,7 +93,7 @@ class FullyConnectedLayer : public Layer // Inherit from Layer
             for (int j = 0; j < inputSize_; ++j) // Loop over each input neuron
             {
                 weightsGradient_[i][j] = flattenedGradient[i] * previousInput_[j] *
-                                         learningRate; // Gradient w.r.t. weights adjusted by learning rate
+                                         1.0f; // Gradient w.r.t. weights (learning rate applied during update)
                 inputGradient[j] += flattenedGradient[i] * weights_[i][j]; // Accumulate gradient w.r.t. input
             }
         }
@@ -133,7 +144,19 @@ class FullyConnectedLayer : public Layer // Inherit from Layer
     /// @return The computed L2 regularization loss for this layer.
     float ComputeL2Regularization(float l2RegularizationFactor) const
     {
-        return 0;
+        float l2Loss = 0.0f;
+        for (const auto& row : weights_)
+        {
+            for (float weight : row)
+            {
+                l2Loss += weight * weight;
+            }
+        }
+        for (float bias : biases_)
+        {
+            l2Loss += bias * bias;
+        }
+        return l2RegularizationFactor * l2Loss;
     }
 
   private:

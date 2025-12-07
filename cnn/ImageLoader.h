@@ -59,6 +59,7 @@ class ImageLoader
         : mDatasetPath(datasetPath)
         , mSettings{}
         , mNumSamples(0)
+        , mShowImages(false)
     {
     }
 
@@ -79,6 +80,9 @@ class ImageLoader
         mSettings.Rotate        = rotate;
         mSettings.numClasses    = numClasses;
     }
+
+    /// @brief Enable or disable displaying images while loading.
+    void SetShowImages(bool showImages) { mShowImages = showImages; }
 
     /// @brief Function to get all folder names in a specific directory.
     /// @return Vector of folder names.
@@ -404,7 +408,10 @@ class ImageLoader
                 // Preprocess the image
                 image = PreprocessingData(image);
 
-                ViewImage(image, "Cross Hair", 3000);
+                if (mShowImages)
+                {
+                    ViewImage(image, "Cross Hair", 3000);
+                }
 
                 // Format image data for CNN model if preprocessing succeeded
                 FormattedData cnnData = FormatImagesForCNN(image, height, width, numChannels, folderName, false);
@@ -459,6 +466,7 @@ class ImageLoader
     std::string             mDatasetPath; // Path to the dataset folder
     ImageProcessingSettings mSettings;    // Setting for input data processing
     size_t                  mNumSamples;
+    bool                    mShowImages;
 
     /// @brief Processes the image based on settings.
     /// @param image The original image.

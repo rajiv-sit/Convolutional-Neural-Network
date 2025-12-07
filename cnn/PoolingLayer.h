@@ -50,6 +50,9 @@ class PoolingLayer : public Layer // Inherit from Layer
         int numChannels = input.size();       // Get the number of channels
         int inputHeight = input[0].size();    // Get input height
         int inputWidth  = input[0][0].size(); // Get input width
+        lastInputHeight_ = inputHeight;
+        lastInputWidth_  = inputWidth;
+        lastChannels_    = numChannels;
 
         // Calculate output dimensions
         int outputHeight = (inputHeight + poolSize_ - 1) / poolSize_; // Adaptive height calculation
@@ -146,9 +149,8 @@ class PoolingLayer : public Layer // Inherit from Layer
 
         // Initialize input gradient tensor with zeros
         std::vector<std::vector<std::vector<float>>> inputGradient(
-            numChannels,
-            std::vector<std::vector<float>>(outputHeight * poolSize_,
-                                            std::vector<float>(outputWidth * poolSize_, 0.0f)));
+            lastChannels_,
+            std::vector<std::vector<float>>(lastInputHeight_, std::vector<float>(lastInputWidth_, 0.0f)));
 
         // Backpropagate gradients
         for (int c = 0; c < numChannels; ++c) // Iterate over channels
@@ -157,13 +159,44 @@ class PoolingLayer : public Layer // Inherit from Layer
             {
                 for (int w = 0; w < outputWidth; ++w) // Iterate over output width
                 {
-                    // Get the upstream gradient for this output position and scale it by learning rate
-                    float grad = internalGradient[c][h][w] * learningRate;
+                    float grad = internalGradient[c][h][w];
 
-                    // Get the indices of the max value from the forward pass
-                    auto maxIndex = maxIndices_[c][h][w];
-                    inputGradient[c][h * poolSize_ + maxIndex.first][w * poolSize_ + maxIndex.second] +=
-                        grad; // Propagate the scaled gradient
+                    if (poolingType_ == PoolingType::MAX)
+                    {
+                        // Route gradient to the position that held the max value
+                        auto maxIndex = maxIndices_[c][h][w];
+                        inputGradient[c][h * poolSize_ + maxIndex.first][w * poolSize_ + maxIndex.second] += grad;
+                    }
+                    else // AVERAGE pooling
+                    {
+                        int validCount = 0;
+                        for (int kh = 0; kh < poolSize_; ++kh)
+                        {
+                            for (int kw = 0; kw < poolSize_; ++kw)
+                            {
+                                int inputH = h * poolSize_ + kh;
+                                int inputW = w * poolSize_ + kw;
+                                if (inputH < lastInputHeight_ && inputW < lastInputWidth_)
+                                {
+                                    validCount++;
+                                }
+                            }
+                        }
+
+                        float share = (validCount > 0) ? grad / static_cast<float>(validCount) : 0.0f;
+                        for (int kh = 0; kh < poolSize_; ++kh)
+                        {
+                            for (int kw = 0; kw < poolSize_; ++kw)
+                            {
+                                int inputH = h * poolSize_ + kh;
+                                int inputW = w * poolSize_ + kw;
+                                if (inputH < lastInputHeight_ && inputW < lastInputWidth_)
+                                {
+                                    inputGradient[c][inputH][inputW] += share;
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -195,6 +228,9 @@ class PoolingLayer : public Layer // Inherit from Layer
     PoolingType poolingType_; // Type of pooling operation (max or average)
     std::vector<std::vector<std::vector<std::pair<int, int>>>>
         maxIndices_; // Stores indices of max values for backpropagation
+    int lastInputHeight_ = 0;
+    int lastInputWidth_  = 0;
+    int lastChannels_    = 0;
 
     /// @brief De-flattens the upstream gradient if required.
     /// This function reshapes the gradient from a flat structure back to the original pooling layer input dimensions.

@@ -44,38 +44,72 @@ void printDigitRepresentationsAndLabels(std::vector<std::vector<std::vector<std:
 
 int main()
 {
-    // Generate dummy training data
-    size_t numClasses   = 10;    // Number of classes (digits 0-9)
-    size_t height       = 120;   // Image height
-    size_t width        = 120;   // Image width
-    float  epochs       = 10;  // Number of epochs for training
-    float  stopCriteria = 0.001; // Stopping criteria for training
-    float  learningRate = 0.01;  // Learning rate for weight updates
-    float  batchSize    = 1;     // Size of training batches
-    float  dropoutRate  = 0.5f;  // drop out rate
+    try
+    {
+        // Generate dummy training data
+        size_t numClasses   = 10;    // Number of classes (digits 0-9)
+        size_t height       = 120;   // Image height
+        size_t width        = 120;   // Image width
+        float  epochs       = 10;    // Number of epochs for training
+        float  stopCriteria = 0.001; // Stopping criteria for training
+        float  learningRate = 0.01;  // Learning rate for weight updates
+        float  batchSize    = 1;     // Size of training batches
+        float  dropoutRate  = 0.5f;  // drop out rate
 
-    // Set the dataset path (make sure this path is valid on your system)
-    std::string datasetPath = "E:\\AI_DATA\\TrainAndValidateData";
-    //std::string datasetPath = "E:\\Rajiv\\Coding\\Matlab\\data";
+        // Set the dataset path (prefer environment variable DATASET_PATH if provided)
+        const char* datasetEnv  = std::getenv("DATASET_PATH");
+        std::string datasetPath = datasetEnv ? std::string(datasetEnv) : "E:\\AI_DATA\\TrainAndValidateData";
+        if (!datasetEnv)
+        {
+            std::cout << "DATASET_PATH not set. Using default path: " << datasetPath << std::endl;
+        }
 
-    // Create an instance of ImageLoader
-    ImageLoader imageLoader(datasetPath);
+        // Create an instance of ImageLoader
+        ImageLoader imageLoader(datasetPath);
+        imageLoader.SetShowImages(false); // Avoid GUI blocking during batch runs
 
-    //  Selecting the inintial control factors
-    imageLoader.UpdateSettings(true, true, {height, width}, false, numClasses);
-    auto loadedImages = imageLoader.GetImagesFromFolder();
-    auto trainData    = loadedImages.images;
-    auto trainLabels  = loadedImages.labels;
-    height            = trainData[0][0].size();
-    width             = trainData[0][0][0].size();
+        //  Selecting the inintial control factors
+        imageLoader.UpdateSettings(true, true, {height, width}, false, numClasses);
+        auto loadedImages = imageLoader.GetImagesFromFolder();
+
+        if (loadedImages.images.empty())
+        {
+            std::cerr << "No images found at the dataset path. Exiting." << std::endl;
+            return 1;
+        }
+
+        // Simple train/validation split (80/20)
+        const size_t totalSamples   = loadedImages.images.size();
+        size_t       trainCount     = static_cast<size_t>(static_cast<double>(totalSamples) * 0.8);
+        trainCount                  = std::clamp(trainCount, static_cast<size_t>(1), totalSamples);
+        const size_t valCount       = totalSamples - trainCount;
+
+        std::vector<std::vector<std::vector<std::vector<float>>>> trainData(
+            loadedImages.images.begin(), loadedImages.images.begin() + trainCount);
+        std::vector<std::vector<float>> trainLabels(loadedImages.labels.begin(),
+                                                    loadedImages.labels.begin() + trainCount);
+
+        std::vector<std::vector<std::vector<std::vector<float>>>> valData(
+            loadedImages.images.begin() + trainCount, loadedImages.images.end());
+        std::vector<std::vector<float>> valLabels(loadedImages.labels.begin() + trainCount, loadedImages.labels.end());
+
+        if (valData.empty())
+        {
+            std::cout << "Validation split is empty; using training data for validation fallback." << std::endl;
+            valData   = trainData;
+            valLabels = trainLabels;
+        }
+
+        height = trainData[0][0].size();
+        width  = trainData[0][0][0].size();
 
     // Print data
     //printDigitRepresentationsAndLabels(trainData, trainLabels);
 
-    // Define the CNN architecture
-    std::vector<std::unique_ptr<Layer>> layers;
+        // Define the CNN architecture
+        std::vector<std::unique_ptr<Layer>> layers;
 
-    std::cout << std::format("Building CNN model") << std::endl;
+        std::cout << std::format("Building CNN model") << std::endl;
 
     //// Build model
 
@@ -141,21 +175,25 @@ int main()
         std::make_unique<FullyConnectedLayer>(1024, numClasses)); // numClasses output for classification
     layers.emplace_back(std::make_unique<OutputLayer>()); // Output layer to compute probabilities for each class
 
-    // Create the CNN model
-    CNNModel cnnModel(std::move(layers), CNNModel::LossType::MEAN_SQUARED_ERROR); // Move layers to avoid copying
+        // Create the CNN model
+        CNNModel cnnModel(std::move(layers), CNNModel::LossType::MEAN_SQUARED_ERROR); // Move layers to avoid copying
 
-    // Setting up the initial control parameters
-    cnnModel.SetTrainingParameters(epochs, stopCriteria, learningRate);
+        // Setting up the initial control parameters
+        cnnModel.SetTrainingParameters(epochs, stopCriteria, learningRate);
 
-    // Train the model
-    cnnModel.Train(trainData, trainLabels);
+        // Train the model
+        cnnModel.Train(trainData, trainLabels);
 
-    // Validate the model
-    auto valData                = loadedImages.images;
-    auto valLabels              = loadedImages.labels;
-    auto [valLoss, valAccuracy] = cnnModel.Validate(valData, valLabels);
+        // Validate the model
+        auto [valLoss, valAccuracy] = cnnModel.Validate(valData, valLabels);
 
-    std::cout << "Validation Loss: " << valLoss << ", Validation Accuracy: " << valAccuracy << std::endl;
+        std::cout << "Validation Loss: " << valLoss << ", Validation Accuracy: " << valAccuracy << std::endl;
 
-    return 0;
+        return 0;
+    }
+    catch (const std::exception& ex)
+    {
+        std::cerr << "Unhandled exception: " << ex.what() << std::endl;
+        return 2;
+    }
 }

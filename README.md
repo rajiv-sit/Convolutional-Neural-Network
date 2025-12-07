@@ -129,8 +129,4 @@ int main()
 }
 ```
 
-## Referece: 
-OpenAI. "ChatGPT." *OpenAI*, 2024, https://openai.com/chatgpt.
-
-Written with the help of AI. 
 

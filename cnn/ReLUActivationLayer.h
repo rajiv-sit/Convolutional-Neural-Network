@@ -86,7 +86,7 @@ class ReLUActivationLayer : public Layer
                     // Check if the input value was greater than zero during the forward pass
                     if (input_[c][h][w] > 0)
                     {
-                        inputGradient[c][h][w] = upstreamGradient[c][h][w] * learningRate; // Scale by learning rate
+                        inputGradient[c][h][w] = upstreamGradient[c][h][w]; // Pass-through gradient
                     }
                     // No need to set inputGradient[c][h][w] to zero, as it's already initialized to zero
                 }

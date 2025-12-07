@@ -217,7 +217,7 @@ if(MSVC)
 elseif(GCC OR CLANG)
     # Treat warning return-type as error to avoid undefined behaviour
     # when a non-void function does not return a value.
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${BITNESS_FLAG} -std=c++11 -Werror=return-type")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${BITNESS_FLAG} -Werror=return-type")
     set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wall -Wno-long-long")
 
 elseif(INTEL)
@@ -240,7 +240,6 @@ find_package(opencv REQUIRED)
 # add sources 
 set(CNN_SRC_LIST
 	cnn/CNNModel.h
-	cnn/ConvolutionalLayer.h
 	cnn/ConvolutionalLayer.h
 	cnn/CrossEntropyLoss.h
 	cnn/DropoutLayer.h

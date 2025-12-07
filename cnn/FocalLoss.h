@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Loss.h"
+#include <algorithm>
 #include <cmath>
 #include <vector>
 
@@ -24,11 +25,13 @@ class FocalLoss : public Loss
     float ComputeLoss(const std::vector<float>& trueLabels, const std::vector<float>& predictions) const override
     {
         float loss = 0.0f;
+        constexpr float eps = 1e-6f;
         // Iterate over each true label and prediction
         for (size_t i = 0; i < trueLabels.size(); ++i)
         {
             // Calculate the predicted probability for the true class
             float p_t = trueLabels[i] * predictions[i] + (1 - trueLabels[i]) * (1 - predictions[i]);
+            p_t       = std::clamp(p_t, eps, 1.0f - eps); // avoid log(0) and log(1)
             // Accumulate the focal loss for the current prediction
             loss -= alpha_ * std::pow((1 - p_t), gamma_) * std::log(p_t);
         }
@@ -43,13 +46,16 @@ class FocalLoss : public Loss
                                        const std::vector<float>& trueLabels) const override
     {
         std::vector<float> gradient(predictions.size());
+        constexpr float eps = 1e-6f;
         // Iterate over each prediction to calculate the gradient
         for (size_t i = 0; i < predictions.size(); ++i)
         {
             float p_t = trueLabels[i] * predictions[i] + (1 - trueLabels[i]) * (1 - predictions[i]);
+            p_t       = std::clamp(p_t, eps, 1.0f - eps);
             // Calculate the focal gradient for the current prediction
             float focal_grad =
-                -alpha_ * std::pow((1 - p_t), gamma_) * (gamma_ * std::log(p_t) - (p_t > 0 ? 1.0f / p_t : 0.0f));
+                -alpha_ * std::pow((1 - p_t), gamma_) *
+                (gamma_ * std::log(p_t) - (p_t > 0 ? 1.0f / p_t : 0.0f));
             gradient[i] = focal_grad; // Store the computed gradient
         }
         return gradient; // Return the vector of gradients
@@ -81,10 +87,12 @@ class FocalLoss : public Loss
                                                 float                     gamma = 2.0f) const override
     {
         std::vector<float> gradient(predictions.size());
+        constexpr float eps = 1e-6f;
         // Iterate over each prediction to calculate the gradient
         for (size_t i = 0; i < predictions.size(); ++i)
         {
             float p_t = trueLabels[i] * predictions[i] + (1 - trueLabels[i]) * (1 - predictions[i]);
+            p_t       = std::clamp(p_t, eps, 1.0f - eps);
             // Calculate the focal gradient for the current prediction
             float focal_grad =
                 -alpha * std::pow((1 - p_t), gamma) * (gamma * std::log(p_t) - (p_t > 0 ? 1.0f / p_t : 0.0f));
@@ -101,10 +109,12 @@ class FocalLoss : public Loss
                                            const std::vector<float>& trueLabels) override
     {
         std::vector<float> gradient(predictions.size());
+        constexpr float eps = 1e-6f;
         // Iterate over each prediction to calculate the loss gradient
         for (size_t i = 0; i < predictions.size(); ++i)
         {
             float p_t = trueLabels[i] * predictions[i] + (1 - trueLabels[i]) * (1 - predictions[i]);
+            p_t       = std::clamp(p_t, eps, 1.0f - eps);
             // Calculate the focal gradient for the current prediction
             float focal_grad =
                 -alpha_ * std::pow((1 - p_t), gamma_) * (gamma_ * std::log(p_t) - (p_t > 0 ? 1.0 / p_t : 0.0));

@@ -200,7 +200,6 @@ class ConvolutionalLayer : public Layer
 
                                     // Update the weight gradient based on the input data and output gradient
                                     weightGradients_[filterIndex][channelIndex][kernelHeightIndex][kernelWidthIndex] +=
-                                        learningRate *
                                         outputGradient[filterIndex][outputHeightIndex][outputWidthIndex] *
                                         input_[channelIndex][inputHeightIndex][inputWidthIndex];
                                 }
@@ -321,9 +320,30 @@ class ConvolutionalLayer : public Layer
     /// @brief Computes the L2 regularization loss for the layer.
     /// @param [in] l2RegularizationFactor The factor for scaling the regularization loss.
     /// @return The computed L2 regularization loss for this layer.
-    float ComputeL2Regularization(float l2RegularizationFactor) const
+    float ComputeL2Regularization(float l2RegularizationFactor) const override
     {
-        return 0;
+        float l2Loss = 0.0f;
+        for (const auto& filter : weights_)
+        {
+            for (const auto& channel : filter)
+            {
+                for (const auto& row : channel)
+                {
+                    for (float weight : row)
+                    {
+                        l2Loss += weight * weight;
+                    }
+                }
+            }
+        }
+        for (const auto& biasRow : biases_)
+        {
+            for (float bias : biasRow)
+            {
+                l2Loss += bias * bias;
+            }
+        }
+        return l2RegularizationFactor * l2Loss;
     }
 
   private:

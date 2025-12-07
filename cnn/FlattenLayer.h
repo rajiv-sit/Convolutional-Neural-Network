@@ -37,7 +37,11 @@ class FlattenLayer : public Layer
         size_t height   = input[0].size();    // Height of the input
         size_t width    = input[0][0].size(); // Width of the input
 
-        // Compute the size of the flattened output
+        // Persist original shape for backward reshape
+        originalChannels_ = channels;
+        originalHeight_   = height;
+        originalWidth_    = width;
+
         size_t flattenedSize = channels * height * width;
 
         // Create the output tensor with one batch dimension
@@ -74,46 +78,54 @@ class FlattenLayer : public Layer
     std::vector<std::vector<std::vector<float>>>
         Backward(const std::vector<std::vector<std::vector<float>>>& upstreamGradient, float learningRate) override
     {
-        // Get dimensions from the upstream gradient
-        size_t numSamples    = upstreamGradient.size();       // Number of samples
-        size_t flattenedSize = upstreamGradient[0][0].size(); // Size of the flattened gradient
-
-        // Assuming original input dimensions are known
-        size_t channels = 1;             // Number of channels (e.g., RGB = 3)
-        size_t height   = 1;             // Set this based on the original input height
-        size_t width    = flattenedSize; // Set this based on the original input width
-
-        // Ensure that the flattened size matches the expected size
-        if (flattenedSize != channels * height * width)
+        if (originalChannels_ == 0 || originalHeight_ == 0 || originalWidth_ == 0)
         {
-            throw std::invalid_argument("Flattened size does not match original dimensions.");
+            throw std::runtime_error("FlattenLayer backward called without a stored forward shape.");
         }
 
-        // Create the output gradient tensor
-        std::vector<std::vector<std::vector<float>>> output(
-            numSamples,
-            std::vector<std::vector<float>>(channels,
-                                            std::vector<float>(height * width))); // Output shape: N x C x (H * W)
+        // Flatten upstream gradient into a single vector
+        std::vector<float> flatGradients;
+        flatGradients.reserve(originalChannels_ * originalHeight_ * originalWidth_);
 
-        // Reshape the upstream gradient back to the original dimensions
-        for (size_t sample = 0; sample < numSamples; ++sample) // Loop over each sample
+        if (upstreamGradient.size() == 1 && upstreamGradient[0].size() == 1)
         {
-            for (size_t index = 0; index < flattenedSize; ++index) // Loop over flattened gradient
+            flatGradients.insert(flatGradients.end(), upstreamGradient[0][0].begin(), upstreamGradient[0][0].end());
+        }
+        else
+        {
+            for (const auto& channel : upstreamGradient)
             {
-                // Determine the original channel, height, and width from the flattened index
-                size_t c = index / (height * width);           // Determine the channel
-                size_t h = (index % (height * width)) / width; // Determine the height
-                size_t w = (index % (height * width)) % width; // Determine the width
-
-                // Assign values to output gradient
-                output[sample][c][h * width + w] = upstreamGradient[sample][0][index];
+                for (const auto& row : channel)
+                {
+                    flatGradients.insert(flatGradients.end(), row.begin(), row.end());
+                }
             }
         }
 
-        // Learning rate usage (if applicable)
-        // Note: Since FlattenLayer does not have weights, this is just a placeholder for potential future use.
+        const size_t expectedSize = originalChannels_ * originalHeight_ * originalWidth_;
+        if (flatGradients.size() != expectedSize)
+        {
+            throw std::invalid_argument("Flattened gradient size does not match original tensor shape.");
+        }
 
-        return output; // Return the reshaped gradients
+        // Reshape back to original 3D shape (no batch dimension in this implementation)
+        std::vector<std::vector<std::vector<float>>> output(
+            originalChannels_,
+            std::vector<std::vector<float>>(originalHeight_, std::vector<float>(originalWidth_, 0.0f)));
+
+        size_t index = 0;
+        for (size_t c = 0; c < originalChannels_; ++c)
+        {
+            for (size_t h = 0; h < originalHeight_; ++h)
+            {
+                for (size_t w = 0; w < originalWidth_; ++w)
+                {
+                    output[c][h][w] = flatGradients[index++];
+                }
+            }
+        }
+
+        return output;
     }
 
     /// @brief Updates the weights of the flatten layer.
@@ -134,4 +146,9 @@ class FlattenLayer : public Layer
     {
         return 0;
     }
+
+  private:
+    size_t originalChannels_ = 0;
+    size_t originalHeight_   = 0;
+    size_t originalWidth_    = 0;
 };

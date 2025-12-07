@@ -47,21 +47,8 @@ class OutputLayer : public Layer
     std::vector<std::vector<std::vector<float>>>
         Backward(const std::vector<std::vector<std::vector<float>>>& upstreamGradient, float learningRate) override
     {
-        std::vector<std::vector<std::vector<float>>> scaledGradient = upstreamGradient; // Initialize scaled gradient
-
-        // Scale the upstream gradient by the learning rate
-        for (auto& sample : scaledGradient)
-        {
-            for (auto& channel : sample)
-            {
-                for (auto& value : channel)
-                {
-                    value *= learningRate; // Scale each gradient by the learning rate
-                }
-            }
-        }
-
-        return scaledGradient; // Return the scaled gradient
+        // Output layer has no parameters; just propagate gradient as-is
+        return upstreamGradient;
     }
 
 

@@ -3,7 +3,7 @@
 Small end-to-end CNN prototype written in modern C++ that loads image datasets with OpenCV and trains a hand-rolled model. The project is geared toward Windows and uses Conan to fetch dependencies and CMake/Visual Studio to build.
 
 ## Dataset Layout
-- Put the dataset anywhere you like; just set `DATASET_PATH` to that folder (default fallback is `E:\AI_DATA\TrainAndValidateData`, e.g., `set DATASET_PATH=D:\data\cnn`).
+- Put the dataset anywhere you like; just set `DATASET_PATH` to that folder before running (e.g., `set DATASET_PATH=D:\data\cnn`). If you don't set it, the code falls back to `E:\AI_DATA\TrainAndValidateData`.
 - Expected structure under the dataset folder:
   - One subfolder per class with `.jpg` images. Class names the code maps today: `Bikes`, `Buffalo`, `Cars`, `Elephant`, `Motorcycles`, `Planes`, `Rhino`, `Ships`, `Trains`, `Zebra`.
 - Images are resized/processed on load; grayscale vs. RGB is controlled in code via `ImageLoader` settings (currently RGB, 120x120).
